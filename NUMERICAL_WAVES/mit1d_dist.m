@@ -14,7 +14,6 @@ dx = L0/10; % Spatial step
 dt = 2.6*dx/cg; % Time step
 dt = min(dt,dur/600); % Minimum time step for making a movie
 epsg = 0.1; % Small stability parameter
-nu=0.01; % Viscosity
 
 
 % Initialize vectors
@@ -38,12 +37,6 @@ eta(1,1)=0; % removes small leftover from exponential
 u(1,1)=0; % removes small leftover from exponential 
 
 % Define matrices
-Q2 = diag(-2*ones(1,K),0) + diag(ones(1,K-1),1) + diag(ones(1,K-1),-1);
-Q2(1,1)=0;
-Q2(1,2)=0;
-Q2(end,end-1)=0;
-Q2(end,end)=0;
-
 
 H1 = zeros(K);
 for k=2:K-1
@@ -95,14 +88,14 @@ M1(end,end)=0;
 
 G = zeros(K,2);
 for n=1:T-1
-    
+    tildeh = (h+eta(:,n));
     % Equation 69
     Gadv = zeros(K,1);
     for k=2:K-1
-        Gadv(k,1) = 1/(4*dx)*(u(k+1,n)^2+2*u(k+1)*u(k)-2*(u(k-1)*u(k))-u(k-1)^2);
+        Gadv(k) = 1/(2*dx*tildeh(k))*u(k,n)*(tildeh(k+1)*u(k+1,n)-tildeh(k-1)*u(k-1,n));
     end
-    Gdiss = nu/(dx^2)*Q2*u(:,n);
-    G(:,2) = -Gadv+Gdiss;
+
+    G(:,2) = -Gadv;
     if n==1
         G12 = G(:,2);
     else
@@ -143,25 +136,6 @@ figure
     saveas(gcf,'eta.png')
 
 %% Plot snapshots in time
-
-for i=round(linspace(1,T,5))
-close(gcf)
-figure
-    plot(x,eta(:,i))
-    hold on;
-    plot(x,-2*h/hmax,'k--');
-    xlabel('x');
-    ylabel('\eta');
-    tlabel = sprintf('t = %.1f L/cg',t(i)/(L/cg));
-    title(['\eta as a function of x at ' tlabel]);
-    legend('\eta','2h/h_{max}');
-    ylim([-2.6,2.6])
-    xlim([x(1) x(end)]);
-    set(gcf, 'Position',  [576, 252, 768, 576]) % presentation size
-    saveas(gcf,'eta.png')
-end
-
-%%
 tsel = [1 L/(cg*dt) 2*L/(cg*dt) 3*L/(cg*dt) 4*L/(cg*dt)];
 tsel = round(tsel);
 figure
@@ -182,7 +156,7 @@ figure
 %% Make a movie
 fps = 60;
 mlength = 10;
-vidfile = VideoWriter('eta_pulse_long.mp4','MPEG-4');
+vidfile = VideoWriter('eta_pulse.mp4','MPEG-4');
 vidfile.FrameRate=fps;
 open(vidfile);  
 figure(1);
@@ -206,3 +180,36 @@ figure(1);
      end
 close(vidfile);
 close(gcf)
+
+%% Check conservation rules
+mass = NaN(1,T);
+momentum = NaN(1,T);
+ke = NaN(1,T);
+pe = NaN(1,T);
+energy = NaN(1,T);
+for n=1:T
+    tildeh = (h(:)+eta(:,n));
+    mass(n) = sum(tildeh);
+    momentum(n) = sum(tildeh.*u(:,n));
+    ke(n) = sum(1/2*tildeh.*(u(:,n).^2));
+    pe(n) = sum(1/2*g*eta(:,n).^2);
+    energy(n) = ke(n)+pe(n);
+end
+
+figure
+    plot(t,mass/mass(1));
+    hold on
+    plot(t,momentum/momentum(1));
+    plot(t,ke/ke(1));
+    plot(t,pe/pe(1));
+    plot(t,energy/ke(1));
+
+    xlabel('t');
+    xticks([1 2*L/(cg) 4*L/(cg) 6*L/(cg) 8*L/(cg)]);
+    xticklabels({'0','2L/c_{g}', '4L/c_{g}', '6L/c_{g}','8L/c_{g}'})
+    ylabel('conserved quantity');
+    title('Conserved quantities as a function of time');
+    xlim([t(1),t(end)]);
+    legend('mass (h+\eta)','momentum ((h+\eta)u)','KE (1/2(h+\eta)u^2)','PE (1/2g(h+\eta)^2)','E = PE+KE');
+    set(gcf, 'Position',  [576, 252, 768, 576]) % presentation size
+    saveas(gcf,'conservation.png')    
